@@ -9,3 +9,7 @@
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
+
+// Component modules
+pub mod codec;
+pub mod media;
