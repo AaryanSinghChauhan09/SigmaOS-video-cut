@@ -1,18 +1,10 @@
 [package]
-name = "sigmaos-media-component"
+name = "sigmaos_video_cut"
 version = "0.1.0"
 edition = "2021"
-authors = ["SigmaOS Team"]
-license = "MIT OR Apache-2.0"
-description = "SigmaOS media component with sophisticated implementation"
+license = "MIT"
+description = "SigmaOS video-cut component inspired by Linux Mint / Omarchy / Arch Linux."
 
-[dependencies]
-anyhow = "1.0"
-thiserror = "1.0"
-log = "0.4"
-env_logger = "0.10"
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
-
-[dev-dependencies]
-serde_json = "1"
+[lib]
+name = "sigmaos_video_cut"
+path = "src/lib.rs"
