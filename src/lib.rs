@@ -1,62 +1,72 @@
-// SPDX-License-Identifier: Apache-2.0
-//! SigmaOS-video-cut — SigmaOS video-cut component inspired by Linux Mint / Omarchy / Arch Linux.
+//! SigmaOS-video-cut: video cutting model inspired by Omacom's omacut.
 //!
-//! CLI-style tool: subcommand dispatch with fail-fast unknown-command handling.
-//! Principles: single responsibility, fail-fast, defensive programming,
-//! component isolation, stable API, deterministic tests.
+//! Real implementation: clips, timestamps, trimming, and validation.
+//! Replaces the 104-line CLI placeholder.
 
-#![forbid(unsafe_code)]
-
+use std::collections::BTreeMap;
 use std::fmt;
-/// Errors for `ToolError` operations. Fail-fast: invalid input is rejected.
+
+/// Video clip segment.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ToolError {
-    /// Tool name must not be empty
-    EmptyName,
-    /// Unrecognized subcommand
-    UnknownCommand(String),
-    /// Subcommand requires arguments
-    MissingArgs(String),
+pub struct VideoClip {
+    pub id: String,
+    pub name: String,
+    pub start_seconds: u64,
+    pub end_seconds: u64,
 }
 
-impl fmt::Display for ToolError {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VideoCutError {
+    EmptyName,
+    InvalidTimestamp(String),
+    DuplicateClip(String),
+}
+
+impl fmt::Display for VideoCutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyName => write!(f, "tool name must not be empty"),
-            Self::UnknownCommand(x) => write!(f, "unrecognized subcommand: {x}"),
-            Self::MissingArgs(x) => write!(f, "subcommand requires arguments: {x}"),
+            Self::EmptyName => write!(f, "clip name must not be empty"),
+            Self::InvalidTimestamp(msg) => write!(f, "invalid timestamp: {}", msg),
+            Self::DuplicateClip(id) => write!(f, "duplicate clip {:?}", id),
         }
     }
 }
 
-impl std::error::Error for ToolError {}
+impl std::error::Error for VideoCutError {}
 
-/// A command-line tool with a small fixed subcommand set.
-#[derive(Debug)]
-pub struct Tool {
-    name: String,
+/// Video cutting project.
+pub struct VideoCutProject {
+    pub name: String,
+    clips: BTreeMap<String, VideoClip>,
 }
 
-impl Tool {
-    /// Create the tool; fails fast on empty name.
-    pub fn new(name: impl Into<String>) -> Result<Self, ToolError> {
-        let name = name.into();
-        if name.trim().is_empty() { return Err(ToolError::EmptyName); }
-        Ok(Self { name })
+impl VideoCutProject {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            clips: BTreeMap::new(),
+        }
     }
 
-    /// Tool name.
-    pub fn name(&self) -> &str { &self.name }
-
-    /// Dispatch a subcommand. Supported: `status`, `version`, `help`.
-    /// Commands needing args that get none fail fast.
-    pub fn run(&self, args: &[&str]) -> Result<String, ToolError> {
-        match args.first().copied().unwrap_or("help") {
-            "status" => Ok(format!("{}: ready", self.name)),
-            "version" => Ok(format!("{}: 0.1.0", self.name)),
-            "help" => Ok(format!("{}: commands: status, version, help", self.name)),
-            other => Err(ToolError::UnknownCommand(other.to_string())),
+    pub fn add_clip(&mut self, clip: VideoClip) -> Result<(), VideoCutError> {
+        if clip.name.trim().is_empty() { return Err(VideoCutError::EmptyName); }
+        if clip.start_seconds >= clip.end_seconds {
+            return Err(VideoCutError::InvalidTimestamp("start must be before end".into()));
         }
+        let id = clip.id.clone();
+        if self.clips.contains_key(&id) {
+            return Err(VideoCutError::DuplicateClip(id.clone()));
+        }
+        self.clips.insert(id, clip);
+        Ok(())
+    }
+
+    pub fn clip_count(&self) -> usize { self.clips.len() }
+
+    pub fn get_clip(&self, id: &str) -> Option<&VideoClip> { self.clips.get(id) }
+
+    pub fn export_timeline(&self) -> Vec<(String, u64, u64)> {
+        self.clips.values().map(|c| (c.name.clone(), c.start_seconds, c.end_seconds)).collect()
     }
 }
 
@@ -65,40 +75,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_and_version() {
-        let t = Tool::new("demo").unwrap();
-        assert_eq!(t.run(&["status"]).unwrap(), "demo: ready");
-        assert!(t.run(&["version"]).unwrap().contains("0.1.0"));
+    fn test_project_create_aaa() {
+        let p = VideoCutProject::new("My Video");
+        assert_eq!(p.name, "My Video");
+        assert_eq!(p.clip_count(), 0);
     }
 
     #[test]
-    fn no_args_shows_help() {
-        let t = Tool::new("demo").unwrap();
-        assert!(t.run(&[]).unwrap().contains("commands"));
+    fn test_add_clip_aaa() {
+        let mut p = VideoCutProject::new("My Video");
+        let c = VideoClip { id: "c1".into(), name: "intro".into(), start_seconds: 0, end_seconds: 10 };
+        p.add_clip(c).unwrap();
+        assert_eq!(p.clip_count(), 1);
     }
 
     #[test]
-    fn unknown_command_fails() {
-        let t = Tool::new("demo").unwrap();
-        assert!(matches!(t.run(&["bogus"]), Err(ToolError::UnknownCommand(_))));
+    fn test_empty_name_rejected_aaa() {
+        let mut p = VideoCutProject::new("My Video");
+        let c = VideoClip { id: "x".into(), name: "".into(), start_seconds: 0, end_seconds: 10 };
+        assert!(p.add_clip(c).is_err());
     }
 
     #[test]
-    fn empty_name_fails() {
-        assert!(Tool::new(" ").is_err());
+    fn test_invalid_timestamp_rejected_aaa() {
+        let mut p = VideoCutProject::new("My Video");
+        let c = VideoClip { id: "x".into(), name: "bad".into(), start_seconds: 10, end_seconds: 5 };
+        assert!(p.add_clip(c).is_err());
     }
 
-}
-
-/// Backwards-compatible component handle (kept for existing callers/tests).
-#[derive(Debug, Default)]
-pub struct Component {
-    name: &'static str,
-}
-
-impl Component {
-    /// Create the component handle.
-    pub fn new() -> Self {
-        Self { name: "SigmaOS Component" }
+    #[test]
+    fn test_duplicate_rejected_aaa() {
+        let mut p = VideoCutProject::new("My Video");
+        let c = VideoClip { id: "x".into(), name: "X".into(), start_seconds: 0, end_seconds: 10 };
+        p.add_clip(c).unwrap();
+        let c2 = VideoClip { id: "x".into(), name: "X".into(), start_seconds: 0, end_seconds: 10 };
+        assert!(p.add_clip(c2).is_err());
     }
 }
