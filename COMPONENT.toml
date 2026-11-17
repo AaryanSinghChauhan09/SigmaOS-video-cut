@@ -1,6 +1,6 @@
 [component]
 name = "SigmaOS-video-cut"
-description = "SigmaOS subsystem component for video-cut"
+description = "Lossless-ish video trimmer"
 version = "0.1.0"
 tier = 5
 
